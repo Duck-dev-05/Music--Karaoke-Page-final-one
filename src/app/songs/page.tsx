@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,7 @@ const defaultCoverImages = {
   other: '/Music/covers/default-music.jpg',
 };
 
-function SongsPage() {
+export default function SongsPage() {
   const [songs, setSongs] = useState<MusicFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,6 +61,65 @@ function SongsPage() {
   const [isRepeat, setIsRepeat] = useState(false);
   const [isShuffle, setIsShuffle] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Initialize audio element
+    audioRef.current = new Audio();
+    const audio = audioRef.current;
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+
+    const handleLoadedMetadata = () => {
+      setDuration(audio.duration);
+    };
+
+    const handleEnded = () => {
+      if (isRepeat) {
+        audio.currentTime = 0;
+        audio.play().catch(console.error);
+      } else {
+        handleNext();
+      }
+    };
+
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.removeEventListener('ended', handleEnded);
+      audio.pause();
+      audio.src = '';
+    };
+  }, []);
+
+  // Handle song changes and playback
+  useEffect(() => {
+    if (!audioRef.current || !currentSong) return;
+
+    const audio = audioRef.current;
+    audio.src = currentSong.path;
+    audio.load();
+
+    if (isPlaying) {
+      audio.play().catch(error => {
+        console.error('Error playing audio:', error);
+        setIsPlaying(false);
+      });
+    } else {
+      audio.pause();
+    }
+
+    return () => {
+      audio.pause();
+      audio.currentTime = 0;
+    };
+  }, [currentSong, isPlaying]);
 
   useEffect(() => {
     async function fetchMusicData() {
@@ -92,46 +151,65 @@ function SongsPage() {
   }, [activeTab]);
 
   const handlePlayPause = (song: MusicFile) => {
+    if (!audioRef.current) return;
+
     if (currentSong?.path === song.path) {
-      setIsPlaying(!isPlaying);
+      // Toggle play/pause for current song
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        audioRef.current.play().catch(error => {
+          console.error('Error playing audio:', error);
+          setIsPlaying(false);
+        });
+        setIsPlaying(true);
+      }
     } else {
+      // Switch to new song
+      if (currentSong) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
       setCurrentSong(song);
       setIsPlaying(true);
     }
   };
 
   const handlePrevious = () => {
-    if (songs.length === 0) return;
-    const currentIndex = songs.findIndex(song => song.path === currentSong?.path);
+    if (songs.length === 0 || !currentSong) return;
+    const currentIndex = songs.findIndex(song => song.path === currentSong.path);
     const newIndex = currentIndex > 0 ? currentIndex - 1 : songs.length - 1;
     setCurrentSong(songs[newIndex]);
     setIsPlaying(true);
   };
 
   const handleNext = () => {
-    if (songs.length === 0) return;
-    const currentIndex = songs.findIndex(song => song.path === currentSong?.path);
+    if (songs.length === 0 || !currentSong) return;
+    const currentIndex = songs.findIndex(song => song.path === currentSong.path);
     const newIndex = currentIndex < songs.length - 1 ? currentIndex + 1 : 0;
     setCurrentSong(songs[newIndex]);
     setIsPlaying(true);
   };
 
   const handleTimeUpdate = (time: number) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = time;
     setCurrentTime(time);
   };
 
-  const handleDurationChange = (duration: string) => {
-    setDuration(parseFloat(duration));
-  };
-
   const handleVolumeChange = (newVolume: number) => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = newVolume;
     setVolume(newVolume);
     setIsMuted(newVolume === 0);
   };
 
   const toggleMute = () => {
-    setIsMuted(!isMuted);
-    setVolume(isMuted ? 1 : 0);
+    if (!audioRef.current) return;
+    const newMuted = !isMuted;
+    audioRef.current.muted = newMuted;
+    setIsMuted(newMuted);
   };
 
   const toggleRepeat = () => {
@@ -144,8 +222,10 @@ function SongsPage() {
 
   const handleSongEnd = () => {
     if (isRepeat) {
-      setCurrentTime(0);
-      setIsPlaying(true);
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(console.error);
+      }
     } else if (isShuffle) {
       const randomIndex = Math.floor(Math.random() * songs.length);
       setCurrentSong(songs[randomIndex]);
@@ -296,28 +376,41 @@ function SongsPage() {
 
       {renderContent()}
 
-      <MusicPlayer
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
-        volume={volume}
-        isMuted={isMuted}
-        isRepeat={isRepeat}
-        isShuffle={isShuffle}
-        onPlayPause={() => setIsPlaying(!isPlaying)}
-        onPrevious={handlePrevious}
-        onNext={handleNext}
-        onTimeUpdate={handleTimeUpdate}
-        onDurationChange={handleDurationChange}
-        onVolumeChange={handleVolumeChange}
-        onToggleMute={toggleMute}
-        onToggleRepeat={toggleRepeat}
-        onToggleShuffle={toggleShuffle}
-        onEnded={handleSongEnd}
-      />
+      {currentSong && (
+        <MusicPlayer
+          currentSong={currentSong}
+          isPlaying={isPlaying}
+          currentTime={currentTime}
+          duration={duration}
+          volume={volume}
+          isMuted={isMuted}
+          isRepeat={isRepeat}
+          isShuffle={isShuffle}
+          onPlayPause={() => {
+            if (!audioRef.current || !currentSong) return;
+            
+            if (isPlaying) {
+              audioRef.current.pause();
+              setIsPlaying(false);
+            } else {
+              audioRef.current.play().catch(error => {
+                console.error('Error playing audio:', error);
+                setIsPlaying(false);
+              });
+              setIsPlaying(true);
+            }
+          }}
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+          onTimeUpdate={handleTimeUpdate}
+          onDurationChange={() => {}}
+          onVolumeChange={handleVolumeChange}
+          onToggleMute={toggleMute}
+          onToggleRepeat={toggleRepeat}
+          onToggleShuffle={toggleShuffle}
+          onEnded={handleSongEnd}
+        />
+      )}
     </div>
   );
 }
-
-export default SongsPage;

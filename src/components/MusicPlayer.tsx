@@ -63,45 +63,56 @@ export function MusicPlayer({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fadeInterval = useRef<NodeJS.Timeout>();
 
-  // Handle autoplay when song changes
+  // Handle play/pause state changes
   useEffect(() => {
-    if (currentSong && isPlaying) {
-      setIsLoading(true);
-      if (audioRef.current) {
-        // Fade out current audio if playing
+    if (!audioRef.current || !currentSong) return;
+
+    const playAudio = async () => {
+      try {
+        setIsLoading(true);
         if (isPlaying) {
-          handleFadeOut();
+          await audioRef.current?.play();
+        } else {
+          audioRef.current?.pause();
         }
-        
-        audioRef.current.src = currentSong.path;
-        audioRef.current.volume = 0;
-        
-        // Start loading the audio
-        audioRef.current.load();
-        const playPromise = audioRef.current.play();
-        
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              handleFadeIn();
-              setIsLoading(false);
-            })
-            .catch((error) => {
-              console.error('Error playing audio:', error);
-              setIsLoading(false);
-            });
-        }
+      } catch (error) {
+        console.error('Error controlling playback:', error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-  }, [currentSong, isPlaying]);
+    };
+
+    playAudio();
+  }, [isPlaying, currentSong]);
+
+  // Handle song changes
+  useEffect(() => {
+    if (!currentSong) return;
+
+    const loadNewSong = async () => {
+      if (!audioRef.current) return;
+      
+      setIsLoading(true);
+      audioRef.current.src = currentSong.path;
+      audioRef.current.load();
+
+      try {
+        if (isPlaying) {
+          await audioRef.current.play();
+        }
+      } catch (error) {
+        console.error('Error loading new song:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadNewSong();
+  }, [currentSong?.path]);
 
   // Smooth visibility transition
   useEffect(() => {
-    if (currentSong) {
-      setIsVisible(true);
-    } else {
-      handleFadeOut();
-    }
+    setIsVisible(!!currentSong);
   }, [currentSong]);
 
   // Handle volume changes
@@ -145,7 +156,7 @@ export function MusicPlayer({
           }
           if (!currentSong) {
             setIsVisible(false);
-            setTimeout(onEnded, 300); // Wait for fade out animation
+            setTimeout(onEnded, 300);
           }
         }
       }, 50);
@@ -163,25 +174,23 @@ export function MusicPlayer({
 
     const handleLoadedMetadata = () => {
       setTotalDuration(audio.duration);
-      if (onDurationChange) {
-        onDurationChange(formatTime(audio.duration));
-      }
+      onDurationChange(formatTime(audio.duration));
     };
 
-    const handleLoadedData = () => {
-      setTotalDuration(audio.duration);
+    const handleEnded = () => {
+      onEnded();
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('loadeddata', handleLoadedData);
+    audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('loadeddata', handleLoadedData);
+      audio.removeEventListener('ended', handleEnded);
     };
-  }, [onTimeUpdate, onDurationChange]);
+  }, [onTimeUpdate, onDurationChange, onEnded]);
 
   const formatTime = useCallback((time: number) => {
     if (!time || isNaN(time)) return "0:00";
@@ -219,9 +228,7 @@ export function MusicPlayer({
         onLoadedMetadata={(e) => {
           const audio = e.currentTarget;
           setTotalDuration(audio.duration);
-          if (onDurationChange) {
-            onDurationChange(formatTime(audio.duration));
-          }
+          onDurationChange(formatTime(audio.duration));
         }}
       />
       <div className="flex flex-col gap-3">
@@ -413,4 +420,4 @@ export function MusicPlayer({
       </div>
     </Card>
   );
-} 
+}
