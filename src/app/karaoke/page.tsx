@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useTheme } from 'next-themes';
+import VideoPlayer from '@/components/VideoPlayer';
 import { 
   PlayIcon, 
   PauseIcon,
@@ -17,7 +18,10 @@ import {
   SunIcon,
   MoonIcon,
   MagnifyingGlassIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  CheckIcon,
+  PlusIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 interface KaraokeSong {
@@ -37,6 +41,8 @@ export default function KaraokePage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('search');
   const { theme, setTheme } = useTheme();
   const playerRef = useRef<any>(null);
 
@@ -82,12 +88,19 @@ export default function KaraokePage() {
     if (!searchQuery.trim()) return;
 
     setIsLoading(true);
+    setSearchError(null);
     try {
       const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery)}`);
       const data = await response.json();
       
       if (!response.ok) {
         throw new Error(data.message || 'Failed to search');
+      }
+
+      if (!data.items?.length) {
+        setSearchError('No results found');
+        setSearchResults([]);
+        return;
       }
 
       setSearchResults(data.items.map((item: any) => ({
@@ -100,6 +113,8 @@ export default function KaraokePage() {
       })));
     } catch (error) {
       console.error('Search error:', error);
+      setSearchError(error instanceof Error ? error.message : 'Failed to search');
+      setSearchResults([]);
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +128,7 @@ export default function KaraokePage() {
   const onPlayerStateChange = (event: any) => {
     switch (event.data) {
       case window.YT.PlayerState.ENDED:
-        handleNext();
+        handleNextSong();
         break;
       case window.YT.PlayerState.PLAYING:
         setIsPlaying(true);
@@ -127,7 +142,7 @@ export default function KaraokePage() {
   const onPlayerError = (event: any) => {
     console.error('YouTube Player Error:', event);
     setIsPlaying(false);
-    handleNext(); // Skip to next song on error
+    handleNextSong(); // Skip to next song on error
   };
 
   const handlePlayPause = () => {
@@ -144,27 +159,28 @@ export default function KaraokePage() {
     }
   };
 
-  const handleNext = () => {
-    if (selectedSongs.length === 0) return;
+  const handleNextSong = () => {
+    if (!currentSong || selectedSongs.length === 0) return;
     
-    const currentIndex = selectedSongs.findIndex(song => song.id === currentSong?.id);
-    const nextSong = selectedSongs[currentIndex + 1] || selectedSongs[0];
+    const currentIndex = selectedSongs.findIndex(song => song.id === currentSong.id);
+    if (currentIndex === -1) return;
     
-    if (nextSong) {
-      setCurrentSong(nextSong);
-      try {
-        playerRef.current?.loadVideoById({
-          videoId: nextSong.videoId,
-          startSeconds: 0,
-        });
-        setIsPlaying(true);
-      } catch (error) {
-        console.error('Error loading next video:', error);
-      }
+    // Remove the current song from queue
+    const updatedSongs = [...selectedSongs];
+    updatedSongs.splice(currentIndex, 1);
+    setSelectedSongs(updatedSongs);
+
+    // Play next song if available
+    if (currentIndex < selectedSongs.length - 1) {
+      setCurrentSong(selectedSongs[currentIndex + 1]);
+      setIsPlaying(true);
+    } else {
+      setCurrentSong(null);
+      setIsPlaying(false);
     }
   };
 
-  const handlePrevious = () => {
+  const handlePrevSong = () => {
     if (selectedSongs.length === 0) return;
     
     const currentIndex = selectedSongs.findIndex(song => song.id === currentSong?.id);
@@ -199,234 +215,292 @@ export default function KaraokePage() {
     }
   };
 
-  const addToPlaylist = (song: KaraokeSong) => {
+  const handleAddToQueue = (song: KaraokeSong) => {
+    // Check if song is already in queue
+    const isInQueue = selectedSongs.some(s => s.id === song.id);
+    if (isInQueue) {
+      return; // Silently ignore if already in queue
+    }
+
     setSelectedSongs(prev => {
       const newSongs = [...prev, song];
       // If this is the first song, set it as current and start playing
-      if (prev.length === 0) {
+      if (!currentSong) {
         setCurrentSong(song);
-        try {
-          playerRef.current?.loadVideoById({
-            videoId: song.videoId,
-            startSeconds: 0,
-          });
-          setIsPlaying(true);
-        } catch (error) {
-          console.error('Error loading first song:', error);
+      }
+      return newSongs;
+    });
+  };
+
+  const handleRemoveFromQueue = (index: number) => {
+    setSelectedSongs(prev => {
+      const newSongs = [...prev];
+      const removedSong = newSongs[index];
+      newSongs.splice(index, 1);
+
+      // If removing current song, play next song if available
+      if (currentSong?.id === removedSong.id) {
+        if (newSongs.length > 0) {
+          const nextIndex = index < newSongs.length ? index : 0;
+          setCurrentSong(newSongs[nextIndex]);
+        } else {
+          setCurrentSong(null);
         }
       }
       return newSongs;
     });
   };
 
-  const removeFromPlaylist = (songId: string) => {
-    setSelectedSongs(prev => {
-      const newSongs = prev.filter(song => song.id !== songId);
-      // If removing current song, play next song
-      if (currentSong?.id === songId && newSongs.length > 0) {
-        const nextSong = newSongs[0];
-        setCurrentSong(nextSong);
-        try {
-          playerRef.current?.loadVideoById({
-            videoId: nextSong.videoId,
-            startSeconds: 0,
-          });
-          setIsPlaying(true);
-        } catch (error) {
-          console.error('Error loading next song after remove:', error);
-        }
-      }
-      return newSongs;
-    });
+  const getNextSong = () => {
+    if (!currentSong || selectedSongs.length === 0) return null;
+    const currentIndex = selectedSongs.findIndex(song => song.id === currentSong.id);
+    if (currentIndex === -1 || currentIndex === selectedSongs.length - 1) return null;
+    return selectedSongs[currentIndex + 1];
+  };
+
+  const handlePlayNext = () => {
+    handleNextSong();
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f7f7] dark:bg-gray-900">
-      <div className="container mx-auto px-4 pt-20 pb-24">
-        <Tabs defaultValue="search" className="w-full">
-          <TabsList className="w-full justify-start bg-transparent border-b rounded-none p-0 h-12">
-            <TabsTrigger 
-              value="search" 
-              className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none h-12 px-4"
-            >
-              Tìm kiếm
-            </TabsTrigger>
-            <TabsTrigger 
-              value="selected" 
-              className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-blue-500 rounded-none h-12 px-4"
-            >
-              Đã chọn ({selectedSongs.length})
-            </TabsTrigger>
-          </TabsList>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Section - Video Player */}
+          <div className="lg:col-span-2">
+            <Card className="w-full aspect-video bg-black overflow-hidden">
+              {currentSong ? (
+                <div className="w-full h-full">
+                  <VideoPlayer
+                    videoId={currentSong.videoId}
+                    onEnded={handleNextSong}
+                    nextSong={getNextSong()}
+                    onPlayNext={handlePlayNext}
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                  <p>Select a song to start</p>
+                </div>
+              )}
+            </Card>
 
-          <TabsContent value="search" className="mt-6">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Tìm kiếm bài hát karaoke..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="pl-10 pr-4 py-6 text-lg"
-              />
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-                onClick={handleSearch}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                ) : (
-                  <MagnifyingGlassIcon className="h-5 w-5" />
-                )}
-              </Button>
-            </div>
+            {/* Player Controls */}
+            <Card className="mt-4 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handlePrevSong()}
+                    disabled={!currentSong}
+                  >
+                    <BackwardIcon className="h-6 w-6" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleNextSong()}
+                    disabled={!currentSong}
+                  >
+                    <ForwardIcon className="h-6 w-6" />
+                  </Button>
+                </div>
 
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {searchResults.map((song) => (
-                <Card key={song.id} className="overflow-hidden group">
-                  <div className="relative aspect-video">
-                    <img
-                      src={song.thumbnail}
-                      alt={song.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity duration-200 flex items-center justify-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 text-white hover:text-white hover:bg-white/20"
-                        onClick={() => addToPlaylist(song)}
-                      >
-                        <PlayIcon className="h-8 w-8" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-3">
-                    <h3 className="font-medium truncate">{song.title}</h3>
-                    <p className="text-sm text-gray-500 truncate">{song.channelTitle}</p>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="selected" className="mt-6">
-            {selectedSongs.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500">Chưa có bài hát nào được chọn</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {selectedSongs.map((song, index) => (
-                  <Card key={song.id} className="p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 flex-shrink-0">
-                        <img
-                          src={song.thumbnail}
-                          alt={song.title}
-                          className="w-full h-full object-cover rounded"
-                        />
-                      </div>
-                      <div className="flex-grow min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-500">#{index + 1}</span>
-                          <h3 className="font-medium truncate">{song.title}</h3>
-                        </div>
-                        <p className="text-sm text-gray-500 truncate">{song.channelTitle}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => removeFromPlaylist(song.id)}
-                      >
-                        Xóa
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {currentSong && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t shadow-lg">
-          <div className="container mx-auto px-4">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-4">
-                <img
-                  src={currentSong.thumbnail}
-                  alt={currentSong.title}
-                  className="w-10 h-10 object-cover rounded"
-                />
-                <div className="min-w-0">
-                  <h3 className="font-medium truncate dark:text-white">{currentSong.title}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{currentSong.channelTitle}</p>
+                <div className="flex items-center space-x-4">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsMuted(!isMuted)}
+                  >
+                    {isMuted ? (
+                      <SpeakerXMarkIcon className="h-6 w-6" />
+                    ) : (
+                      <SpeakerWaveIcon className="h-6 w-6" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  >
+                    {theme === 'dark' ? (
+                      <SunIcon className="h-6 w-6" />
+                    ) : (
+                      <MoonIcon className="h-6 w-6" />
+                    )}
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                  onClick={handlePrevious}
-                >
-                  <BackwardIcon className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                  onClick={handlePlayPause}
-                >
-                  {isPlaying ? (
-                    <PauseIcon className="h-5 w-5" />
-                  ) : (
-                    <PlayIcon className="h-5 w-5" />
+            </Card>
+          </div>
+
+          {/* Right Section - Search and Queue */}
+          <div className="lg:col-span-1">
+            <Card className="p-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="search" className="flex-1">
+                    Search
+                  </TabsTrigger>
+                  <TabsTrigger value="queue" className="flex-1">
+                    Queue ({selectedSongs.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="search" className="mt-4">
+                  <div className="flex space-x-2">
+                    <Input
+                      placeholder="Search for songs..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                    />
+                    <Button onClick={handleSearch} disabled={isLoading}>
+                      {isLoading ? (
+                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                      ) : (
+                        <MagnifyingGlassIcon className="h-5 w-5" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {searchError && (
+                    <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded-md">
+                      {searchError}
+                    </div>
                   )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                  onClick={handleNext}
-                >
-                  <ForwardIcon className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-                  onClick={toggleMute}
-                >
-                  {isMuted ? (
-                    <SpeakerXMarkIcon className="h-5 w-5" />
-                  ) : (
-                    <SpeakerWaveIcon className="h-5 w-5" />
-                  )}
-                </Button>
-              </div>
-            </div>
+
+                  <div className="mt-4 space-y-2 max-h-[600px] overflow-y-auto">
+                    {searchResults.map((song) => {
+                      const isInQueue = selectedSongs.some(s => s.id === song.id);
+                      return (
+                        <Card
+                          key={song.id}
+                          className={`p-2 hover:bg-accent transition-colors ${
+                            isInQueue ? 'border-primary' : ''
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="relative group w-24 h-16">
+                              <img
+                                src={song.thumbnail}
+                                alt={song.title}
+                                className="w-full h-full object-cover rounded"
+                              />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-white hover:text-white hover:bg-white/20"
+                                  onClick={() => {
+                                    if (!isInQueue) {
+                                      handleAddToQueue(song);
+                                    }
+                                  }}
+                                >
+                                  {isInQueue ? (
+                                    <CheckIcon className="h-6 w-6" />
+                                  ) : (
+                                    <PlusIcon className="h-6 w-6" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {song.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {song.channelTitle}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={isInQueue ? 'text-primary' : ''}
+                              onClick={() => {
+                                if (!isInQueue) {
+                                  handleAddToQueue(song);
+                                }
+                              }}
+                            >
+                              {isInQueue ? 'Added' : 'Add to Queue'}
+                            </Button>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="queue" className="mt-4">
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {selectedSongs.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p>No songs in queue</p>
+                        <p className="text-sm mt-2">Search and add songs to get started</p>
+                      </div>
+                    ) : (
+                      selectedSongs.map((song, index) => (
+                        <Card
+                          key={`${song.id}-${index}`}
+                          className={`p-2 ${
+                            currentSong?.id === song.id
+                              ? 'border-primary bg-primary/5'
+                              : 'hover:bg-accent'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="relative w-24 h-16">
+                              <img
+                                src={song.thumbnail}
+                                alt={song.title}
+                                className="w-full h-full object-cover rounded"
+                              />
+                              {currentSong?.id === song.id && (
+                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                  {isPlaying ? (
+                                    <PauseIcon className="h-6 w-6 text-white" />
+                                  ) : (
+                                    <PlayIcon className="h-6 w-6 text-white" />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-muted-foreground">
+                                  #{index + 1}
+                                </span>
+                                <p className="text-sm font-medium truncate">
+                                  {song.title}
+                                </p>
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {song.channelTitle}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveFromQueue(index)}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <span className="sr-only">Remove</span>
+                              <XMarkIcon className="h-5 w-5" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </Card>
           </div>
         </div>
-      )}
-
-      {/* YouTube Player */}
-      <div 
-        id="youtube-player" 
-        className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
-        style={{ 
-          display: currentSong ? 'block' : 'none',
-          zIndex: 50,
-          pointerEvents: 'none'
-        }}
-      />
+      </div>
     </div>
   );
-} 
+}

@@ -1,7 +1,22 @@
 'use client';
 
 import { Play } from 'lucide-react';
-import type { YouTubeVideo } from '@/services/youtube';
+
+interface YouTubeVideo {
+  id: {
+    kind: string;
+    videoId: string;
+  };
+  snippet: {
+    title: string;
+    channelTitle: string;
+    thumbnails: {
+      medium: {
+        url: string;
+      };
+    };
+  };
+}
 
 interface NextSongOverlayProps {
   nextSong: YouTubeVideo;
