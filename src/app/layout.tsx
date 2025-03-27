@@ -6,12 +6,13 @@ import { Providers } from './providers'
 import { Navbar } from '@/components/Navbar'
 import SessionProvider from "@/providers/SessionProvider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/toaster";
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Music Karaoke',
-  description: 'A modern karaoke web application',
+  description: 'A web application for karaoke lovers',
 }
 
 export default function RootLayout({
@@ -32,6 +33,7 @@ export default function RootLayout({
             >
               <Navbar />
               {children}
+              <Toaster />
             </ThemeProvider>
           </Providers>
         </SessionProvider>

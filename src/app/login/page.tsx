@@ -1,163 +1,143 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FaGoogle, FaFacebook, FaGithub } from 'react-icons/fa';
+import { FaGoogle, FaTwitter } from 'react-icons/fa';
 import { motion } from 'framer-motion';
-import useAuth from '@/hooks/useAuth';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { setAuth } = useAuth();
+  const [error, setError] = useState('');
 
-  // Get the redirect URL from query params
-  const from = searchParams.get('from') || '/';
+  // Get error message from URL if present
+  const urlError = searchParams?.get('error');
+  const callbackUrl = searchParams?.get('callbackUrl') || '/';
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    try {
-      // Here you would normally make an API call to your backend
-      // For demo purposes, we'll simulate a successful login
-      const response = await new Promise(resolve => setTimeout(() => {
-        resolve({ 
-          user: { id: 1, email },
-          token: 'demo-token'
-        });
-      }, 1000));
+    setError('');
 
-      // Set the auth token in a cookie
-      document.cookie = `auth-token=${response.token}; path=/`;
-      
-      // Update auth state
-      setAuth(response.user);
-      
-      // Redirect to the original page or home
-      router.push(from);
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Invalid email or password');
+      } else {
+        // Redirect to the callback URL or home page
+        router.push(callbackUrl);
+      }
     } catch (error) {
-      console.error('Login failed:', error);
+      setError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSocialLogin = async (provider: string) => {
-    setIsLoading(true);
-    try {
-      // Here you would implement OAuth flow with the provider
-      console.log(`Logging in with ${provider}`);
-      
-      // Simulate successful social login
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // After successful OAuth login:
-      document.cookie = `auth-token=social-token; path=/`;
-      setAuth({ id: 1, provider });
-      router.push(from);
-    } catch (error) {
-      console.error(`${provider} login failed:`, error);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSocialLogin = (provider: string) => {
+    signIn(provider, {
+      callbackUrl,
+    });
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-500/20 via-pink-500/20 to-orange-500/20">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-500 p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <Card className="w-[400px] p-8">
-          <div className="text-center mb-8">
+        <Card className="w-full max-w-md p-8 space-y-6 bg-white/95 backdrop-blur">
+          <div className="text-center">
             <h1 className="text-3xl font-bold">Welcome Back</h1>
-            <p className="text-muted-foreground mt-2">Sign in to your account</p>
+            <p className="text-gray-600 mt-2">Sign in to continue</p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
+          {(error || urlError) && (
+            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
+              {error || "Authentication failed. Please try again."}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
               <Input
                 type="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-11"
-                disabled={isLoading}
+                required
+                className="w-full"
               />
+            </div>
+            <div>
               <Input
                 type="password"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-11"
-                disabled={isLoading}
+                required
+                className="w-full"
               />
             </div>
-
-            <Button 
-              type="submit" 
-              className="w-full h-11"
+            <Button
+              type="submit"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing in...' : 'Sign in'}
+              {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-3 gap-4">
-              <Button
-                variant="outline"
-                className="h-11"
-                onClick={() => handleSocialLogin('google')}
-                disabled={isLoading}
-              >
-                <FaGoogle className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="outline"
-                className="h-11"
-                onClick={() => handleSocialLogin('facebook')}
-                disabled={isLoading}
-              >
-                <FaFacebook className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="outline"
-                className="h-11"
-                onClick={() => handleSocialLogin('github')}
-                disabled={isLoading}
-              >
-                <FaGithub className="h-5 w-5" />
-              </Button>
+          <div className="relative">
+            <Separator className="my-4" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="bg-white px-2 text-gray-500 text-sm">Or continue with</span>
             </div>
           </div>
 
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            Don&apos;t have an account?{' '}
-            <a href="/register" className="text-primary hover:underline">
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleSocialLogin('google')}
+              className="w-full"
+            >
+              <FaGoogle className="w-5 h-5" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleSocialLogin('twitter')}
+              className="w-full"
+            >
+              <FaTwitter className="w-5 h-5 text-[#1DA1F2]" />
+            </Button>
+          </div>
+
+          <div className="text-center text-sm">
+            <span className="text-gray-600">Don't have an account? </span>
+            <Link
+              href="/register"
+              className="text-purple-600 hover:text-purple-800 font-semibold"
+            >
               Sign up
-            </a>
-          </p>
+            </Link>
+          </div>
         </Card>
       </motion.div>
     </div>

@@ -22,6 +22,17 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTheme } from 'next-themes';
+import { useSession, signOut } from 'next-auth/react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { FaUser, FaSignOutAlt, FaCog, FaHistory, FaHeart } from 'react-icons/fa';
 
 // Types
 interface NavItem {
@@ -136,6 +147,7 @@ export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { data: session, status } = useSession();
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -168,6 +180,20 @@ export function Navbar() {
   const toggleTheme = useCallback(() => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   }, [theme, setTheme]);
+
+  const handleSignOut = useCallback(() => {
+    signOut({ redirect: true, callbackUrl: '/login' });
+  }, []);
+
+  const getInitials = useCallback((name: string | null | undefined) => {
+    if (!name) return 'U';
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  }, []);
 
   return (
     <header 
@@ -211,6 +237,70 @@ export function Navbar() {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center space-x-1">
+            {status === 'authenticated' && session?.user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={session.user.image || ''} alt={session.user.name || ''} />
+                      <AvatarFallback>{getInitials(session.user.name)}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium">{session.user.name}</p>
+                      <p className="text-xs text-gray-500">{session.user.email}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile" className="flex items-center cursor-pointer">
+                      <FaUser className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/favorites" className="flex items-center cursor-pointer">
+                      <FaHeart className="mr-2 h-4 w-4" />
+                      <span>Favorites</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/history" className="flex items-center cursor-pointer">
+                      <FaHistory className="mr-2 h-4 w-4" />
+                      <span>History</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings" className="flex items-center cursor-pointer">
+                      <FaCog className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-red-600 focus:text-red-600 cursor-pointer"
+                    onClick={handleSignOut}
+                  >
+                    <FaSignOutAlt className="mr-2 h-4 w-4" />
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="flex items-center space-x-4">
+                <Link href="/login" passHref>
+                  <Button variant="ghost">Login</Button>
+                </Link>
+                <Link href="/register" passHref>
+                  <Button className="bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700">
+                    Register
+                  </Button>
+                </Link>
+              </div>
+            )}
             <Button 
               variant="ghost" 
               size="icon"
@@ -219,18 +309,6 @@ export function Navbar() {
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-            <Button variant="ghost" size="sm" asChild className="h-8">
-              <Link href="/login" className="gap-1.5">
-                <LogIn className="h-4 w-4" />
-                Login
-              </Link>
-            </Button>
-            <Button size="sm" asChild className="h-8 bg-primary hover:bg-primary/90">
-              <Link href="/register" className="gap-1.5">
-                <UserPlus className="h-4 w-4" />
-                Register
-              </Link>
             </Button>
           </div>
 
@@ -297,18 +375,74 @@ export function Navbar() {
               </div>
 
               <div className="pt-2 space-y-1">
-                <Button variant="ghost" className="w-full justify-start gap-2 h-8" asChild>
-                  <Link href="/login">
-                    <LogIn className="h-4 w-4" />
-                    Login
-                  </Link>
-                </Button>
-                <Button className="w-full justify-start gap-2 h-8 bg-primary hover:bg-primary/90" asChild>
-                  <Link href="/register">
-                    <UserPlus className="h-4 w-4" />
-                    Register
-                  </Link>
-                </Button>
+                {status === 'authenticated' && session?.user ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={session.user.image || ''} alt={session.user.name || ''} />
+                          <AvatarFallback>{getInitials(session.user.name)}</AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56" align="end">
+                      <DropdownMenuLabel>
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium">{session.user.name}</p>
+                          <p className="text-xs text-gray-500">{session.user.email}</p>
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/profile" className="flex items-center cursor-pointer">
+                          <FaUser className="mr-2 h-4 w-4" />
+                          <span>Profile</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/favorites" className="flex items-center cursor-pointer">
+                          <FaHeart className="mr-2 h-4 w-4" />
+                          <span>Favorites</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/history" className="flex items-center cursor-pointer">
+                          <FaHistory className="mr-2 h-4 w-4" />
+                          <span>History</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/settings" className="flex items-center cursor-pointer">
+                          <FaCog className="mr-2 h-4 w-4" />
+                          <span>Settings</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-red-600 focus:text-red-600 cursor-pointer"
+                        onClick={handleSignOut}
+                      >
+                        <FaSignOutAlt className="mr-2 h-4 w-4" />
+                        <span>Sign out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <div className="flex flex-col space-y-1">
+                    <Button variant="ghost" className="w-full justify-start gap-2 h-8" asChild>
+                      <Link href="/login">
+                        <LogIn className="h-4 w-4" />
+                        Login
+                      </Link>
+                    </Button>
+                    <Button className="w-full justify-start gap-2 h-8 bg-primary hover:bg-primary/90" asChild>
+                      <Link href="/register">
+                        <UserPlus className="h-4 w-4" />
+                        Register
+                      </Link>
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
