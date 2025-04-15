@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,12 +18,9 @@ import {
   LogIn,
   UserPlus,
   X,
-  Sun,
-  Moon
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTheme } from 'next-themes';
-import { useSession, signOut } from 'next-auth/react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +31,7 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { FaUser, FaSignOutAlt, FaCog, FaHistory, FaHeart } from 'react-icons/fa';
+import { ModeToggle } from "@/components/theme/mode-toggle";
 
 // Types
 interface NavItem {
@@ -54,7 +53,6 @@ interface SearchBarProps {
 }
 
 // Constants
-const SEARCH_DEBOUNCE_MS = 300;
 const SCROLL_THRESHOLD = 10;
 
 const navItems: NavItem[] = [
@@ -146,8 +144,8 @@ NavItem.displayName = 'NavItem';
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
   const { data: session, status } = useSession();
+  const { theme, setTheme } = useTheme();
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -176,13 +174,8 @@ export function Navbar() {
     setIsSearching(false);
   }, [searchQuery, router]);
 
-  // Theme toggle handler
-  const toggleTheme = useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }, [theme, setTheme]);
-
   const handleSignOut = useCallback(() => {
-    signOut({ redirect: true, callbackUrl: '/login' });
+    signOut({ callbackUrl: '/login' });
   }, []);
 
   const getInitials = useCallback((name: string | null | undefined) => {
@@ -236,13 +229,13 @@ export function Navbar() {
           </nav>
 
           {/* Desktop Actions */}
-          <div className="hidden md:flex items-center space-x-1">
-            {status === 'authenticated' && session?.user ? (
+          <div className="hidden md:flex items-center space-x-2">
+            {session?.user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={session.user.image || ''} alt={session.user.name || ''} />
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={session.user.image || ""} />
                       <AvatarFallback>{getInitials(session.user.name)}</AvatarFallback>
                     </Avatar>
                   </Button>
@@ -251,14 +244,14 @@ export function Navbar() {
                   <DropdownMenuLabel>
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium">{session.user.name}</p>
-                      <p className="text-xs text-gray-500">{session.user.email}</p>
+                      <p className="text-xs text-muted-foreground">{session.user.email}</p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="flex items-center cursor-pointer">
                       <FaUser className="mr-2 h-4 w-4" />
-                      <span>Profile</span>
+                      Profile
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -290,26 +283,22 @@ export function Navbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <div className="flex items-center space-x-4">
-                <Link href="/login" passHref>
-                  <Button variant="ghost">Login</Button>
-                </Link>
-                <Link href="/register" passHref>
-                  <Button className="bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/login">
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Login
+                  </Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="/register">
+                    <UserPlus className="h-4 w-4 mr-2" />
                     Register
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             )}
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={toggleTheme}
-              className="h-8 w-8"
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
+            <ModeToggle />
           </div>
 
           {/* Mobile Menu Button and Search */}
@@ -356,14 +345,7 @@ export function Navbar() {
               ))}
               
               <div className="flex items-center gap-2 py-1">
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={toggleTheme}
-                  className="h-8 w-8"
-                >
-                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </Button>
+                <ModeToggle />
                 <Link
                   href="/settings"
                   className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
@@ -375,58 +357,27 @@ export function Navbar() {
               </div>
 
               <div className="pt-2 space-y-1">
-                {status === 'authenticated' && session?.user ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={session.user.image || ''} alt={session.user.name || ''} />
-                          <AvatarFallback>{getInitials(session.user.name)}</AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56" align="end">
-                      <DropdownMenuLabel>
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium">{session.user.name}</p>
-                          <p className="text-xs text-gray-500">{session.user.email}</p>
-                        </div>
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href="/profile" className="flex items-center cursor-pointer">
-                          <FaUser className="mr-2 h-4 w-4" />
-                          <span>Profile</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/favorites" className="flex items-center cursor-pointer">
-                          <FaHeart className="mr-2 h-4 w-4" />
-                          <span>Favorites</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/history" className="flex items-center cursor-pointer">
-                          <FaHistory className="mr-2 h-4 w-4" />
-                          <span>History</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/settings" className="flex items-center cursor-pointer">
-                          <FaCog className="mr-2 h-4 w-4" />
-                          <span>Settings</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-red-600 focus:text-red-600 cursor-pointer"
-                        onClick={handleSignOut}
-                      >
-                        <FaSignOutAlt className="mr-2 h-4 w-4" />
-                        <span>Sign out</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                {session?.user ? (
+                  <>
+                    <div className="px-2.5 py-2">
+                      <p className="text-sm font-medium">{session.user.name}</p>
+                      <p className="text-xs text-muted-foreground">{session.user.email}</p>
+                    </div>
+                    <Link
+                      href="/profile"
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    >
+                      <FaUser className="h-4 w-4" />
+                      Profile
+                    </Link>
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-red-600 hover:bg-red-600/10"
+                    >
+                      <FaSignOutAlt className="h-4 w-4" />
+                      Sign out
+                    </button>
+                  </>
                 ) : (
                   <div className="flex flex-col space-y-1">
                     <Button variant="ghost" className="w-full justify-start gap-2 h-8" asChild>
@@ -435,7 +386,7 @@ export function Navbar() {
                         Login
                       </Link>
                     </Button>
-                    <Button className="w-full justify-start gap-2 h-8 bg-primary hover:bg-primary/90" asChild>
+                    <Button className="w-full justify-start gap-2 h-8" asChild>
                       <Link href="/register">
                         <UserPlus className="h-4 w-4" />
                         Register

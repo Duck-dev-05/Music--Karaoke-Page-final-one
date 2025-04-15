@@ -1,36 +1,54 @@
-import { NextAuthOptions } from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { PrismaClient } from "@prisma/client";
-import NextAuth from "next-auth/next";
-import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
-import TwitterProvider from "next-auth/providers/twitter";
-import bcrypt from "bcryptjs";
+import NextAuth from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { DefaultSession } from 'next-auth';
 
-declare module "next-auth" {
-  interface Session {
+// Test accounts for development
+const TEST_ACCOUNTS = [
+  { 
+    email: "user@test.com", 
+    password: "password123", 
+    role: "user", 
+    name: "Test User",
+    emailNotifications: true,
+    pushNotifications: true,
+    premium: false,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  { 
+    email: "admin@test.com", 
+    password: "admin123", 
+    role: "admin", 
+    name: "Test Admin",
+    emailNotifications: true,
+    pushNotifications: true,
+    premium: true,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  }
+];
+
+declare module 'next-auth' {
+  interface Session extends DefaultSession {
     user: {
       id: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-    }
-  }
-  interface User {
-    id: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
+      role: string;
+      emailNotifications: boolean;
+      pushNotifications: boolean;
+      premium: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    } & DefaultSession['user']
   }
 }
 
-const prisma = new PrismaClient();
-
-export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+const handler = NextAuth({
+  session: {
+    strategy: 'jwt'
+  },
   providers: [
     CredentialsProvider({
-      name: "credentials",
+      name: 'Credentials',
       credentials: {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" }
@@ -40,77 +58,62 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email
-          }
-        });
+        // Find matching test account
+        const account = TEST_ACCOUNTS.find(
+          acc => acc.email === credentials.email && acc.password === credentials.password
+        );
 
-        if (!user) {
-          return null;
+        if (account) {
+          return {
+            id: account.role === 'admin' ? '1' : '2',
+            name: account.name,
+            email: account.email,
+            role: account.role,
+            emailNotifications: account.emailNotifications,
+            pushNotifications: account.pushNotifications,
+            premium: account.premium,
+            createdAt: account.createdAt,
+            updatedAt: account.updatedAt
+          };
         }
 
-        const passwordsMatch = await bcrypt.compare(credentials.password, user.password || '');
-
-        if (!passwordsMatch) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image
-        };
-      }
+        return null;
+      },
     }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    }),
-    TwitterProvider({
-      clientId: process.env.TWITTER_CLIENT_ID || '',
-      clientSecret: process.env.TWITTER_CLIENT_SECRET || '',
-      version: "2.0",
-    })
   ],
   pages: {
     signIn: '/login',
-    signOut: '/login',
-    error: '/login',
-  },
-  session: {
-    strategy: "jwt",
   },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.role = user.role;
         token.name = user.name;
         token.email = user.email;
-        token.picture = user.image;
+        token.emailNotifications = user.emailNotifications;
+        token.pushNotifications = user.pushNotifications;
+        token.premium = user.premium;
+        token.createdAt = user.createdAt;
+        token.updatedAt = user.updatedAt;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.name = token.name;
-        session.user.email = token.email;
-        session.user.image = token.picture as string | null;
+        session.user.role = token.role as string;
+        session.user.name = token.name as string;
+        session.user.email = token.email as string;
+        session.user.emailNotifications = token.emailNotifications as boolean;
+        session.user.pushNotifications = token.pushNotifications as boolean;
+        session.user.premium = token.premium as boolean;
+        session.user.createdAt = token.createdAt as Date;
+        session.user.updatedAt = token.updatedAt as Date;
       }
       return session;
     },
-    async redirect({ url, baseUrl }) {
-      // Allows relative callback URLs
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      // Allows callback URLs on the same origin
-      else if (new URL(url).origin === baseUrl) return url;
-      return baseUrl;
-    }
   },
-  secret: process.env.NEXTAUTH_SECRET,
-}
+});
 
-const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };

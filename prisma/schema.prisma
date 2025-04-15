@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client"
 }
 
 datasource db {
@@ -38,17 +39,37 @@ model Session {
 }
 
 model User {
-  id            String     @id @default(cuid())
+  id            String    @id @default(cuid())
   name          String?
-  email         String?    @unique
+  email         String?   @unique
   emailVerified DateTime?
   image         String?
   password      String?
+  premium       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Additional profile fields
+  bio           String?   @db.Text
+  location      String?
+  website       String?
+  phoneNumber   String?
+  
+  // Preferences
+  theme         String?   @default("system") // light, dark, or system
+  language      String?   @default("en")
+  
+  // Notification settings
+  emailNotifications Boolean @default(true)
+  pushNotifications  Boolean @default(true)
+  
+  // Relations
   accounts      Account[]
   sessions      Session[]
   favorites     Favorite[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  playlists     Playlist[]
+  isPremium     Boolean    @default(false)
+  premiumUntil  DateTime?
 }
 
 model VerificationToken {
@@ -60,14 +81,18 @@ model VerificationToken {
 }
 
 model Song {
-  id          String     @id @default(cuid())
-  title       String
-  artist      String
-  videoId     String     @unique
-  thumbnailUrl String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  favorites   Favorite[]
+  id            String     @id @default(cuid())
+  title         String
+  artist        String
+  videoId       String     @unique
+  thumbnailUrl  String
+  lyrics        String?    @db.Text
+  hasKaraoke    Boolean    @default(false)
+  isPremium     Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  favorites     Favorite[]
+  playlists     PlaylistSong[]
 }
 
 model Favorite {
@@ -79,4 +104,28 @@ model Favorite {
   createdAt DateTime @default(now())
 
   @@unique([userId, songId])
+}
+
+model Playlist {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  isPublic    Boolean        @default(true)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  songs       PlaylistSong[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PlaylistSong {
+  id         String   @id @default(cuid())
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  playlistId String
+  song       Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  songId     String
+  order      Int
+  createdAt  DateTime @default(now())
+
+  @@unique([playlistId, songId])
 }

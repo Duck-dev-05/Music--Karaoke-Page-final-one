@@ -1,44 +1,81 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { PrismaClient } from '@prisma/client';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
+import prisma from '@/lib/prisma';
 
-const prisma = new PrismaClient();
-
-export async function PUT(request: Request) {
+export async function PUT(req: Request) {
   try {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      );
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { name, image } = await request.json();
+    const body = await req.json();
+    const { 
+      name, 
+      image, 
+      bio, 
+      location, 
+      website, 
+      phoneNumber,
+      theme,
+      language,
+      emailNotifications,
+      pushNotifications
+    } = body;
 
-    // Update user in database
-    const updatedUser = await prisma.user.update({
-      where: { email: session.user.email },
-      data: {
-        name: name || undefined,
-        image: image || undefined,
+    // Try to find the user first
+    let user = await prisma.user.findUnique({
+      where: {
+        email: session.user.email,
       },
     });
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = updatedUser;
+    // If user doesn't exist, create them
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: session.user.email,
+          name: session.user.name || '',
+          image: session.user.image || '',
+          theme: 'system',
+          language: 'en',
+          emailNotifications: true,
+          pushNotifications: true,
+          premium: false,
+        },
+      });
+    }
 
-    return NextResponse.json(
-      { message: 'Profile updated successfully', user: userWithoutPassword },
-      { status: 200 }
-    );
-  } catch (error) {
-    console.error('Profile update error:', error);
-    return NextResponse.json(
-      { message: 'Failed to update profile' },
-      { status: 500 }
-    );
+    // Now update the user
+    const updatedUser = await prisma.user.update({
+      where: {
+        email: session.user.email,
+      },
+      data: {
+        name: name ?? user.name,
+        image: image ?? user.image,
+        bio: bio ?? user.bio,
+        location: location ?? user.location,
+        website: website ?? user.website,
+        phoneNumber: phoneNumber ?? user.phoneNumber,
+        theme: theme ?? user.theme ?? 'system',
+        language: language ?? user.language ?? 'en',
+        emailNotifications: emailNotifications ?? user.emailNotifications ?? true,
+        pushNotifications: pushNotifications ?? user.pushNotifications ?? true,
+        updatedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json(updatedUser);
+  } catch (error: any) {
+    console.error("[USER_UPDATE]", error);
+    
+    if (error.code === 'P2025') {
+      return new NextResponse("Failed to update user", { status: 400 });
+    }
+    
+    return new NextResponse(error.message || "Internal Error", { status: 500 });
   }
 }
