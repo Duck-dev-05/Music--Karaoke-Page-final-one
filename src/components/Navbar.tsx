@@ -10,14 +10,16 @@ import { Input } from '@/components/ui/input';
 import {
   Menu,
   Search,
-  Music2,
-  Mic2,
+  Music,
+  Mic,
   ListMusic,
   Heart,
   Settings,
-  LogIn,
-  UserPlus,
+  LogOut,
+  User,
   X,
+  Music2,
+  Mic2,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTheme } from 'next-themes';
@@ -39,6 +41,8 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   description?: string;
+  requireAuth?: boolean;
+  color: string;
 }
 
 interface SearchBarProps {
@@ -55,31 +59,35 @@ interface SearchBarProps {
 // Constants
 const SCROLL_THRESHOLD = 10;
 
-const navItems: NavItem[] = [
-  { 
-    href: '/songs', 
-    label: 'Songs', 
-    icon: Music2,
-    description: 'Browse all songs'
+const routes: NavItem[] = [
+  {
+    label: 'Songs',
+    icon: Music,
+    href: '/songs',
+    color: 'text-sky-500'
   },
-  { 
-    href: '/karaoke', 
-    label: 'Karaoke', 
-    icon: Mic2,
-    description: 'Start singing karaoke'
+  {
+    label: 'Karaoke',
+    icon: Music,
+    href: '/karaoke',
+    color: 'text-violet-500'
   },
-  { 
-    href: '/playlists', 
-    label: 'Playlists', 
+  {
+    label: 'Playlists',
     icon: ListMusic,
-    description: 'Your music playlists'
+    href: '/playlists',
+    color: 'text-pink-500',
+    requireAuth: true,
+    description: 'Create and manage your playlists'
   },
-  { 
-    href: '/favorites', 
-    label: 'Favorites', 
+  {
+    label: 'Favorites',
     icon: Heart,
-    description: 'Your favorite songs'
-  },
+    href: '/favorites',
+    color: 'text-rose-500',
+    requireAuth: true,
+    description: 'View your favorite songs'
+  }
 ];
 
 // Animations
@@ -124,20 +132,47 @@ const SearchBar = memo(({
 SearchBar.displayName = 'SearchBar';
 
 // Navigation Item Component
-const NavItem = memo(({ item, isActive }: { item: NavItem; isActive: boolean }) => (
-  <Link
-    href={item.href}
-    className={cn(
-      "flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium rounded-md transition-all",
-      "hover:bg-primary/10 hover:text-primary",
-      isActive ? "text-primary bg-primary/10" : "text-muted-foreground"
-    )}
-    title={item.description}
-  >
-    <item.icon className="h-4 w-4" />
-    {item.label}
-  </Link>
-));
+const NavItem = memo(({ item, isActive, requiresAuth, isAuthenticated }: { 
+  item: NavItem; 
+  isActive: boolean;
+  requiresAuth?: boolean;
+  isAuthenticated: boolean;
+}) => {
+  const router = useRouter();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (requiresAuth && !isAuthenticated) {
+      if (item.href === '/playlists') {
+        router.push('/login?callbackUrl=/playlists');
+      } else {
+        router.push('/login');
+      }
+    } else {
+      router.push(item.href);
+    }
+  };
+
+  return (
+    <a
+      href={item.href}
+      onClick={handleClick}
+      className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium rounded-md transition-all relative cursor-pointer",
+        "hover:bg-primary/10 hover:text-primary",
+        isActive ? "text-primary bg-primary/10" : "text-muted-foreground",
+        requiresAuth && !isAuthenticated && "opacity-75"
+      )}
+      title={requiresAuth && !isAuthenticated ? `Login required - ${item.description}` : item.description}
+    >
+      <item.icon className={cn("h-4 w-4", item.color)} />
+      {item.label}
+      {requiresAuth && !isAuthenticated && (
+        <LogOut className="h-3 w-3 ml-1 opacity-75" />
+      )}
+    </a>
+  );
+});
 
 NavItem.displayName = 'NavItem';
 
@@ -151,6 +186,13 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+
+  // Redirect to login if accessing protected routes while not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated' && pathname.startsWith('/profile')) {
+      router.push('/login');
+    }
+  }, [status, pathname, router]);
 
   // Handle scroll effect
   useEffect(() => {
@@ -174,8 +216,12 @@ export function Navbar() {
     setIsSearching(false);
   }, [searchQuery, router]);
 
-  const handleSignOut = useCallback(() => {
-    signOut({ callbackUrl: '/login' });
+  const handleSignOut = useCallback(async () => {
+    setMobileMenuOpen(false);
+    await signOut({ 
+      redirect: true,
+      callbackUrl: '/'
+    });
   }, []);
 
   const getInitials = useCallback((name: string | null | undefined) => {
@@ -202,7 +248,7 @@ export function Navbar() {
             href="/" 
             className="flex items-center space-x-2 transition-transform hover:scale-105"
           >
-            <Music2 className="h-5 w-5 text-primary" />
+            <Music className="h-5 w-5 text-primary" />
             <span className="text-lg font-semibold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               Karaoke Music
             </span>
@@ -210,11 +256,13 @@ export function Navbar() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
-            {navItems.map((item) => (
+            {routes.map((item) => (
               <NavItem 
                 key={item.href} 
                 item={item} 
                 isActive={pathname === item.href} 
+                requiresAuth={item.requireAuth}
+                isAuthenticated={status === 'authenticated'}
               />
             ))}
 
@@ -235,16 +283,33 @@ export function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src={session.user.image || ""} />
-                      <AvatarFallback>{getInitials(session.user.name)}</AvatarFallback>
+                      <AvatarImage 
+                        src={session.user.image || "/images/default-avatar.png"} 
+                        alt={session.user.name || "User"}
+                      />
+                      <AvatarFallback>
+                        {session.user.name?.[0]?.toUpperCase() || 'U'}
+                      </AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end">
-                  <DropdownMenuLabel>
+                <DropdownMenuContent className="w-72" align="end">
+                  <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium">{session.user.name}</p>
-                      <p className="text-xs text-muted-foreground">{session.user.email}</p>
+                      <p className="text-sm font-medium leading-none">{session.user.name}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{session.user.email}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Heart className="h-3 w-3" />
+                          <span>{session.user.premium ? 'Premium' : 'Free'} Account</span>
+                        </div>
+                        {session.user.premium && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            <span>Premium User</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
@@ -283,20 +348,34 @@ export function Navbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href="/login">
-                    <LogIn className="h-4 w-4 mr-2" />
-                    Login
-                  </Link>
-                </Button>
-                <Button size="sm" asChild>
-                  <Link href="/register">
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Register
-                  </Link>
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <User className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">Guest User</p>
+                      <p className="text-xs leading-none text-muted-foreground">Sign in to access more features</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/login" className="flex items-center cursor-pointer">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Login
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/register" className="flex items-center cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      Register
+                </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <ModeToggle />
           </div>
@@ -336,11 +415,13 @@ export function Navbar() {
             className="md:hidden overflow-hidden bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
           >
             <div className="px-4 py-2 space-y-1">
-              {navItems.map((item) => (
+              {routes.map((item) => (
                 <NavItem 
                   key={item.href} 
                   item={item} 
                   isActive={pathname === item.href} 
+                  requiresAuth={item.requireAuth}
+                  isAuthenticated={status === 'authenticated'}
                 />
               ))}
               
@@ -360,18 +441,18 @@ export function Navbar() {
                 {session?.user ? (
                   <>
                     <div className="px-2.5 py-2">
-                      <p className="text-sm font-medium">{session.user.name}</p>
+                          <p className="text-sm font-medium">{session.user.name}</p>
                       <p className="text-xs text-muted-foreground">{session.user.email}</p>
-                    </div>
+                        </div>
                     <Link
                       href="/profile"
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
                     >
                       <FaUser className="h-4 w-4" />
                       Profile
-                    </Link>
+                        </Link>
                     <button
-                      onClick={handleSignOut}
+                        onClick={handleSignOut}
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-red-600 hover:bg-red-600/10"
                     >
                       <FaSignOutAlt className="h-4 w-4" />
@@ -380,18 +461,20 @@ export function Navbar() {
                   </>
                 ) : (
                   <div className="flex flex-col space-y-1">
-                    <Button variant="ghost" className="w-full justify-start gap-2 h-8" asChild>
-                      <Link href="/login">
-                        <LogIn className="h-4 w-4" />
+                    <Link
+                      href="/login"
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    >
+                      <LogOut className="h-4 w-4" />
                         Login
                       </Link>
-                    </Button>
-                    <Button className="w-full justify-start gap-2 h-8" asChild>
-                      <Link href="/register">
-                        <UserPlus className="h-4 w-4" />
+                    <Link
+                      href="/register"
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    >
+                      <User className="h-4 w-4" />
                         Register
                       </Link>
-                    </Button>
                   </div>
                 )}
               </div>

@@ -1,44 +1,24 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { updateUserProfile, updateUserStats, logUserActivity } from '@/lib/db/users';
-import { userProfileSchema } from '@/lib/db/schema';
+import { initializeDatabase, executeQuery } from '@/lib/db';
 
-// Simulated user profiles database
-const userProfiles = new Map([
-  ['user@test.com', {
-    id: 'user@test.com',
-    fullName: 'Free User',
-    email: 'user@test.com',
-    type: 'Free User',
-    profilePicture: '',
-    bio: 'Music enthusiast',
-    favoriteGenres: ['Pop', 'Rock'],
-    totalSongs: 0,
-    totalPlaylists: 0,
-    joinedDate: '2024-01-01',
-    lastActive: new Date().toISOString(),
-  }],
-  ['premium@test.com', {
-    id: 'premium@test.com',
-    fullName: 'Premium User',
-    email: 'premium@test.com',
-    type: 'Premium User',
-    profilePicture: '',
-    bio: 'Professional singer',
-    favoriteGenres: ['Jazz', 'Classical', 'R&B'],
-    totalSongs: 15,
-    totalPlaylists: 3,
-    joinedDate: '2024-01-01',
-    lastActive: new Date().toISOString(),
-  }],
-]);
+// Initialize database on first request
+let isInitialized = false;
+
+async function ensureDatabaseInitialized() {
+  if (!isInitialized) {
+    await initializeDatabase();
+    isInitialized = true;
+  }
+}
 
 // GET user profile
 export async function GET(req: Request) {
   try {
+    await ensureDatabaseInitialized();
+    
     const session = await getServerSession(authOptions);
-
     if (!session?.user) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
@@ -48,12 +28,57 @@ export async function GET(req: Request) {
 
     // Check if the requesting user has permission to view the profile
     if (userId !== session.user.id) {
-      // Add your permission logic here
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const profile = await getUserProfile(userId);
-    return NextResponse.json(profile);
+    // Fetch user profile from database
+    const result = await executeQuery(
+      'SELECT * FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!result.rows.length) {
+      // Create default profile for new users
+      const defaultProfile = {
+        id: userId,
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image,
+        role: 'user',
+        bio: '',
+        location: '',
+        website: '',
+        phone_number: '',
+        email_notifications: false,
+        push_notifications: false,
+        premium: false
+      };
+
+      await executeQuery(
+        `INSERT INTO users (
+          id, name, email, image, role, bio, location, website, 
+          phone_number, email_notifications, push_notifications, premium
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          defaultProfile.id,
+          defaultProfile.name,
+          defaultProfile.email,
+          defaultProfile.image,
+          defaultProfile.role,
+          defaultProfile.bio,
+          defaultProfile.location,
+          defaultProfile.website,
+          defaultProfile.phone_number,
+          defaultProfile.email_notifications,
+          defaultProfile.push_notifications,
+          defaultProfile.premium
+        ]
+      );
+
+      return NextResponse.json(defaultProfile);
+    }
+
+    return NextResponse.json(result.rows[0]);
   } catch (error) {
     console.error('Profile fetch error:', error);
     return new NextResponse(
@@ -64,10 +89,12 @@ export async function GET(req: Request) {
 }
 
 // UPDATE user profile
-export async function PUT(request: Request) {
+export async function PATCH(request: Request) {
   try {
-    const session = await getServerSession();
-    if (!session?.user?.email) {
+    await ensureDatabaseInitialized();
+    
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
         { status: 401 }
@@ -75,68 +102,58 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const userProfile = userProfiles.get(session.user.email);
+    
+    // Update user profile in database
+    const result = await executeQuery(
+      `UPDATE users SET 
+        name = COALESCE($1, name),
+        bio = COALESCE($2, bio),
+        location = COALESCE($3, location),
+        website = COALESCE($4, website),
+        phone_number = COALESCE($5, phone_number),
+        email_notifications = COALESCE($6, email_notifications),
+        push_notifications = COALESCE($7, push_notifications),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $8
+      RETURNING *`,
+      [
+        body.name,
+        body.bio,
+        body.location,
+        body.website,
+        body.phoneNumber,
+        body.emailNotifications,
+        body.pushNotifications,
+        session.user.id
+      ]
+    );
 
-    if (!userProfile) {
+    if (!result.rows.length) {
       return NextResponse.json(
         { success: false, message: 'Profile not found' },
         { status: 404 }
       );
     }
 
-    // Update allowed fields
-    const updatedProfile = {
-      ...userProfile,
-      fullName: body.fullName || userProfile.fullName,
-      profilePicture: body.profilePicture || userProfile.profilePicture,
-      bio: body.bio || userProfile.bio,
-      favoriteGenres: body.favoriteGenres || userProfile.favoriteGenres,
-      lastActive: new Date().toISOString(),
-    };
-
-    userProfiles.set(session.user.email, updatedProfile);
+    // Log the activity
+    await executeQuery(
+      `INSERT INTO user_activities (user_id, activity_type, metadata)
+      VALUES ($1, $2, $3)`,
+      [
+        session.user.id,
+        'profile_updated',
+        JSON.stringify({ updatedFields: Object.keys(body) })
+      ]
+    );
 
     return NextResponse.json({
       success: true,
-      profile: updatedProfile,
+      profile: result.rows[0],
     });
-  } catch (error) {
-    return NextResponse.json(
-      { success: false, message: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PATCH(req: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-
-    const body = await req.json();
-    const validatedData = userProfileSchema.partial().parse(body);
-
-    // Update user profile
-    const updatedProfile = await updateUserProfile(session.user.id, validatedData);
-
-    // Update stats if provided
-    if (body.stats) {
-      await updateUserStats(session.user.id, body.stats);
-    }
-
-    // Log activity
-    await logUserActivity(session.user.id, 'PROFILE_UPDATE', {
-      updatedFields: Object.keys(validatedData)
-    });
-
-    return NextResponse.json(updatedProfile);
   } catch (error) {
     console.error('Profile update error:', error);
-    return new NextResponse(
-      'Error updating profile',
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
       { status: 500 }
     );
   }

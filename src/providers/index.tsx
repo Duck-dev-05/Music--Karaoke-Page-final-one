@@ -1,10 +1,14 @@
 'use client';
 
 import { SessionProvider } from 'next-auth/react';
-import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'sonner';
 
-export function Providers({ children }: { children: React.ReactNode }) {
+interface ProvidersProps {
+  children: React.ReactNode;
+}
+
+export function Providers({ children }: ProvidersProps) {
   return (
     <SessionProvider>
       <ThemeProvider
@@ -12,9 +16,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
+        themes={['light', 'dark', 'system']}
       >
         {children}
-        <Toaster />
+        <Toaster richColors closeButton position="top-center" />
       </ThemeProvider>
     </SessionProvider>
   );

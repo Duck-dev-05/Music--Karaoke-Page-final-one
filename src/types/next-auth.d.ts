@@ -1,33 +1,35 @@
-import NextAuth from 'next-auth';
-import { JWT } from 'next-auth/jwt';
-import type { DefaultSession } from "next-auth"
+import { DefaultSession, DefaultUser } from "next-auth"
+import { JWT } from "next-auth/jwt"
+import NextAuth from "next-auth"
 
-export interface ExtendedUser {
+interface IUser {
   id: string
-  name: string
-  email: string
-  image?: string
-  bio?: string
-  location?: string
-  website?: string
-  phoneNumber?: string
-  theme?: "light" | "dark" | "system"
-  language?: string
+  role: string
   emailNotifications: boolean
   pushNotifications: boolean
   premium: boolean
   createdAt: Date
   updatedAt: Date
+  isTestAccount: boolean
+  name?: string | null
+  email?: string | null
+  image?: string | null
 }
 
-declare module 'next-auth' {
+declare module "next-auth" {
   interface Session {
-    user: ExtendedUser
+    user: {
+      id: string
+      email: string
+      name?: string | null
+      image?: string | null
+      premium: boolean
+    }
   }
 
-  interface User extends ExtendedUser {}
+  interface User extends IUser {}
 }
 
-declare module 'next-auth/jwt' {
-  interface JWT extends ExtendedUser {}
+declare module "next-auth/jwt" {
+  interface JWT extends IUser {}
 } 

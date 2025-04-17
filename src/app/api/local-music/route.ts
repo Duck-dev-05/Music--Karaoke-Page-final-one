@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const defaultThumbnails = {
+type MusicType = 'pop' | 'rock' | 'jazz' | 'classical' | 'electronic' | 'other';
+
+const defaultThumbnails: Record<MusicType, string> = {
   pop: '/Music/covers/default-pop.jpg',
   rock: '/Music/covers/default-rock.jpg',
   jazz: '/Music/covers/default-jazz.jpg',
@@ -10,6 +12,16 @@ const defaultThumbnails = {
   electronic: '/Music/covers/default-electronic.jpg',
   other: '/Music/covers/default-music.jpg',
 };
+
+function determineMusicType(filename: string): MusicType {
+  const lowerName = filename.toLowerCase();
+  if (lowerName.includes('pop')) return 'pop';
+  if (lowerName.includes('rock')) return 'rock';
+  if (lowerName.includes('jazz')) return 'jazz';
+  if (lowerName.includes('classical')) return 'classical';
+  if (lowerName.includes('electronic')) return 'electronic';
+  return 'other';
+}
 
 async function getAllMusicFiles(dir: string): Promise<{ name: string; path: string; thumbnail: string }[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });

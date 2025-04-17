@@ -1,130 +1,236 @@
-import { Metadata } from 'next';
-import { PricingPlans } from '@/components/PricingPlans';
+"use client";
 
-export const metadata: Metadata = {
-  title: 'Premium Features',
-  description: 'Upgrade your karaoke experience with premium features. Get access to exclusive songs, professional effects, and more.',
-};
+import { useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import {
+  Music,
+  Download,
+  Headphones,
+  Wifi,
+  Star,
+  Check,
+  Crown,
+  Sparkles,
+  X,
+  Zap
+} from "lucide-react";
+
+const plans = [
+  {
+    id: "basic",
+    name: "Basic",
+    price: "4.99",
+    description: "Perfect for casual listeners",
+    features: [
+      { text: "50 songs per month", included: true },
+      { text: "Standard audio quality", included: true },
+      { text: "Limited offline playback", included: true },
+      { text: "Basic support", included: true },
+      { text: "Ad-supported", included: false },
+      { text: "Exclusive content", included: false }
+    ],
+    popular: false
+  },
+  {
+    id: "premium",
+    name: "Premium",
+    price: "9.99",
+    description: "Most popular choice",
+    features: [
+      { text: "Unlimited songs", included: true },
+      { text: "High-quality audio", included: true },
+      { text: "Unlimited offline playback", included: true },
+      { text: "Priority support", included: true },
+      { text: "Ad-free experience", included: true },
+      { text: "Exclusive content", included: true }
+    ],
+    popular: true
+  },
+  {
+    id: "family",
+    name: "Family",
+    price: "14.99",
+    description: "Share with up to 6 family members",
+    features: [
+      { text: "Everything in Premium", included: true },
+      { text: "Up to 6 accounts", included: true },
+      { text: "Family mix playlist", included: true },
+      { text: "Parental controls", included: true },
+      { text: "Family support", included: true },
+      { text: "Shared playlists", included: true }
+    ],
+    popular: false
+  }
+];
 
 export default function PremiumPage() {
+  const { data: session, update } = useSession();
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string>("premium");
+
+  const handleUpgrade = async (planId: string) => {
+    if (!session?.user) {
+      toast.error("Please sign in to upgrade");
+      router.push("/login");
+      return;
+    }
+
+    setIsLoading(planId);
+
+    try {
+      const response = await fetch("/api/premium/upgrade", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ planId })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to upgrade");
+      }
+
+      await update({
+        ...session,
+        user: {
+          ...session.user,
+          email: "premium@test.com"
+        }
+      });
+
+      toast.success(`Successfully upgraded to ${planId} plan!`, {
+        description: "Enjoy your new features!"
+      });
+
+      router.push("/playlists");
+    } catch (error) {
+      console.error("Upgrade error:", error);
+      toast.error("Failed to upgrade", {
+        description: "Please try again later or contact support."
+      });
+    } finally {
+      setIsLoading(null);
+    }
+  };
+
+  const isPremium = session?.user?.email === "premium@test.com";
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-background to-background/80">
-      <div className="container mx-auto">
-        <div className="py-12">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h1 className="text-5xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary/80 to-secondary">
-              Unlock Premium Features
-            </h1>
-            <p className="text-xl text-muted-foreground">
-              Take your karaoke experience to the next level with our premium features. 
-              Enjoy ad-free singing, professional effects, and exclusive content.
-            </p>
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl font-bold tracking-tight">
+            Choose Your Premium Plan
+          </h1>
+          <p className="text-xl text-muted-foreground">
+            Select the perfect plan for your music journey
+          </p>
         </div>
 
-        <PricingPlans />
-
-        {/* Additional Benefits Section */}
-        <section className="py-16">
-          <div className="container mx-auto">
-            <h2 className="text-3xl font-bold text-center mb-12">Why Go Premium?</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg
-                    className="w-8 h-8 text-primary"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
-                    />
-                  </svg>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.map((plan) => (
+            <Card 
+              key={plan.id}
+              className={`relative overflow-hidden ${
+                plan.popular ? 'border-primary shadow-lg scale-105' : ''
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute top-0 right-0 p-4">
+                  <Badge variant="default" className="bg-primary">
+                    <Zap className="w-4 h-4 mr-1" />
+                    Most Popular
+                  </Badge>
                 </div>
-                <h3 className="text-xl font-semibold mb-2">Professional Quality</h3>
-                <p className="text-muted-foreground">
-                  Experience studio-grade sound quality and professional vocal effects.
-                </p>
-              </div>
-
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg
-                    className="w-8 h-8 text-primary"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+              )}
+              
+              <CardHeader>
+                <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                <CardDescription>{plan.description}</CardDescription>
+              </CardHeader>
+              
+              <CardContent>
+                <div className="mb-6">
+                  <span className="text-3xl font-bold">${plan.price}</span>
+                  <span className="text-muted-foreground">/month</span>
                 </div>
-                <h3 className="text-xl font-semibold mb-2">Unlimited Access</h3>
-                <p className="text-muted-foreground">
-                  No restrictions on songs, playlists, or recording time.
-                </p>
-              </div>
-
-              <div className="text-center p-6">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg
-                    className="w-8 h-8 text-primary"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
+                
+                <div className="space-y-4">
+                  {plan.features.map((feature, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                        feature.included ? 'bg-primary/10' : 'bg-muted'
+                      }`}>
+                        {feature.included ? (
+                          <Check className="h-4 w-4 text-primary" />
+                        ) : (
+                          <X className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <span className={feature.included ? '' : 'text-muted-foreground'}>
+                        {feature.text}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <h3 className="text-xl font-semibold mb-2">Exclusive Features</h3>
-                <p className="text-muted-foreground">
-                  Early access to new features and premium-only content.
-                </p>
-              </div>
-            </div>
+              </CardContent>
+              
+              <CardFooter>
+                <Button 
+                  className="w-full"
+                  size="lg"
+                  variant={plan.popular ? "default" : "outline"}
+                  onClick={() => handleUpgrade(plan.id)}
+                  disabled={isLoading !== null || isPremium}
+                >
+                  {isLoading === plan.id ? (
+                    <>
+                      <Crown className="mr-2 h-4 w-4 animate-pulse" />
+                      Upgrading...
+                    </>
+                  ) : isPremium ? (
+                    <>
+                      <Crown className="mr-2 h-4 w-4" />
+                      Current Plan
+                    </>
+                  ) : (
+                    <>
+                      <Crown className="mr-2 h-4 w-4" />
+                      Choose {plan.name}
+                    </>
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+
+        <div className="text-center space-y-4">
+          <p className="text-sm text-muted-foreground">
+            By upgrading, you agree to our Terms of Service and Privacy Policy
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <Badge variant="outline" className="py-1 px-2">
+              <Check className="w-4 h-4 mr-1" />
+              Cancel anytime
+            </Badge>
+            <Badge variant="outline" className="py-1 px-2">
+              <Check className="w-4 h-4 mr-1" />
+              Secure payment
+            </Badge>
+            <Badge variant="outline" className="py-1 px-2">
+              <Check className="w-4 h-4 mr-1" />
+              24/7 support
+            </Badge>
           </div>
-        </section>
-
-        {/* FAQ Section */}
-        <section className="py-16 border-t border-border/50">
-          <div className="container mx-auto max-w-3xl">
-            <h2 className="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-xl font-semibold mb-2">Can I cancel my subscription?</h3>
-                <p className="text-muted-foreground">
-                  Yes, you can cancel your subscription at any time. You'll continue to have access to premium features until the end of your billing period.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold mb-2">What payment methods do you accept?</h3>
-                <p className="text-muted-foreground">
-                  We accept all major credit cards, PayPal, and other popular payment methods.
-                </p>
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold mb-2">Is there a free trial?</h3>
-                <p className="text-muted-foreground">
-                  Yes! You can try our premium features free for 7 days with any subscription plan.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
       </div>
-    </main>
+    </div>
   );
 } 

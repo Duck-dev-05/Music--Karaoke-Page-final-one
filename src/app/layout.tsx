@@ -4,14 +4,15 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Providers } from '@/providers'
 import { Navbar } from '@/components/Navbar'
-import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/toaster";
+import { MobileNav } from '@/components/MobileNav'
+import { Toaster } from 'sonner'
+import { Toaster as ReactHotToastToaster } from "react-hot-toast";
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Karaoke App',
-  description: 'A modern karaoke application',
+  title: 'Karaoke Music',
+  description: 'Your favorite karaoke platform',
 }
 
 export default function RootLayout({
@@ -23,18 +24,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+          <div className="min-h-screen bg-background pb-[80px] md:pb-0">
             <Navbar />
-            <main>
-              {children}
-            </main>
-            <Toaster />
-          </ThemeProvider>
+            <main>{children}</main>
+            <MobileNav />
+          </div>
+          <Toaster />
+          <ReactHotToastToaster />
         </Providers>
       </body>
     </html>

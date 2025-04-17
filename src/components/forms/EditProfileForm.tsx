@@ -12,12 +12,35 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, User, Settings, Bell } from "lucide-react";
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { motion } from 'framer-motion';
-import type { ExtendedUser } from '@/types/next-auth';
+import { ImagePlus, User, Settings, Bell } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { motion } from "framer-motion";
+import { Session } from "next-auth";
+
+interface ExtendedUser {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+  role: string;
+  bio?: string;
+  location?: string;
+  website?: string;
+  phoneNumber?: string;
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  premium: boolean;
+  theme?: string;
+  language?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CustomSession extends Session {
+  user: ExtendedUser;
+}
 
 const profileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -52,12 +75,12 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
     defaultValues: {
       name: session?.user?.name || '',
       email: session?.user?.email || '',
-      bio: session?.user?.bio || '',
-      location: session?.user?.location || '',
-      website: session?.user?.website || '',
-      phoneNumber: session?.user?.phoneNumber || '',
-      emailNotifications: session?.user?.emailNotifications || false,
-      pushNotifications: session?.user?.pushNotifications || false,
+      bio: (session?.user as ExtendedUser)?.bio || '',
+      location: (session?.user as ExtendedUser)?.location || '',
+      website: (session?.user as ExtendedUser)?.website || '',
+      phoneNumber: (session?.user as ExtendedUser)?.phoneNumber || '',
+      emailNotifications: (session?.user as ExtendedUser)?.emailNotifications || false,
+      pushNotifications: (session?.user as ExtendedUser)?.pushNotifications || false,
     }
   });
 
@@ -71,29 +94,38 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
     }
 
     try {
+      setIsLoading(true);
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("upload_preset", "ml_default");
 
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/your-cloud-name/image/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const response = await fetch('/api/user/avatar', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
 
       const data = await response.json();
-      await updateSession({
-        ...session,
-        user: {
-          ...session?.user,
-          image: data.secure_url,
-        },
-      });
-      toast.success("Image uploaded successfully");
+      
+      if (data.success) {
+        await updateSession({
+          ...session,
+          user: {
+            ...session?.user,
+            image: data.imageUrl,
+          },
+        });
+        toast.success("Profile picture updated successfully");
+      } else {
+        throw new Error(data.error || 'Failed to update profile picture');
+      }
     } catch (error) {
-      toast.error("Error uploading image");
+      console.error('Error uploading image:', error);
+      toast.error("Failed to update profile picture");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -174,16 +206,19 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
               <div className="flex flex-col items-center space-y-4">
                 <div className="relative">
                   <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
-                    <AvatarImage src={session?.user?.image} />
+                    <AvatarImage 
+                      src={session?.user?.image || "/default-avatar.png"}
+                      alt={session?.user?.name || "User"}
+                    />
                     <AvatarFallback>
-                      {session?.user?.name?.charAt(0).toUpperCase()}
+                      {session?.user?.name?.[0]?.toUpperCase() || 'U'}
                     </AvatarFallback>
                   </Avatar>
                   <Label
                     htmlFor="picture"
-                    className="absolute bottom-0 right-0 bg-primary text-primary-foreground p-2 rounded-full shadow-lg cursor-pointer hover:bg-primary/90 transition-colors"
+                    className="absolute bottom-0 right-0 bg-primary text-primary-foreground p-2 rounded-full shadow-lg cursor-pointer hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
-                    <Camera className="h-4 w-4" />
+                    <ImagePlus className="h-4 w-4" />
                   </Label>
                   <Input
                     id="picture"
@@ -191,10 +226,11 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
                     accept="image/*"
                     className="hidden"
                     onChange={handleImageUpload}
+                    disabled={isLoading}
                   />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Click the camera icon to upload a new profile picture
+                  {isLoading ? "Uploading..." : "Click the camera icon to upload a new profile picture"}
                 </p>
               </div>
 
@@ -285,11 +321,11 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
                     </p>
                   </div>
                   <select
-                    value={session?.user?.theme || "system"}
+                    value={(session?.user as ExtendedUser)?.theme || "system"}
                     onChange={(e) => updateSession({
                       ...session,
                       user: {
-                        ...session?.user,
+                        ...(session?.user as ExtendedUser),
                         theme: e.target.value,
                       },
                     })}
@@ -309,11 +345,11 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
                     </p>
                   </div>
                   <select
-                    value={session?.user?.language || "en"}
+                    value={(session?.user as ExtendedUser)?.language || "en"}
                     onChange={(e) => updateSession({
                       ...session,
                       user: {
-                        ...session?.user,
+                        ...(session?.user as ExtendedUser),
                         language: e.target.value,
                       },
                     })}
@@ -338,11 +374,11 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
                     </p>
                   </div>
                   <Switch
-                    checked={session?.user?.emailNotifications || false}
+                    checked={(session?.user as ExtendedUser)?.emailNotifications || false}
                     onCheckedChange={(checked) => updateSession({
                       ...session,
                       user: {
-                        ...session?.user,
+                        ...(session?.user as ExtendedUser),
                         emailNotifications: checked,
                       },
                     })}
@@ -357,11 +393,11 @@ export function EditProfileForm({ onClose }: EditProfileFormProps) {
                     </p>
                   </div>
                   <Switch
-                    checked={session?.user?.pushNotifications || false}
+                    checked={(session?.user as ExtendedUser)?.pushNotifications || false}
                     onCheckedChange={(checked) => updateSession({
                       ...session,
                       user: {
-                        ...session?.user,
+                        ...(session?.user as ExtendedUser),
                         pushNotifications: checked,
                       },
                     })}

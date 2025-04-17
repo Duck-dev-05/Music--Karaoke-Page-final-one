@@ -1,11 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  swcMinify: true,
+  reactStrictMode: false,
+  swcMinify: false,
   images: {
-    domains: ['0.0.0.0', 'img.youtube.com', 'i.ytimg.com'],
+    domains: ['localhost'],
+    unoptimized: true
   },
   webpack: (config, { isServer }) => {
+    // Fix for node:async_hooks
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      "async_hooks": false,
+    };
+
     // Optimize chunk loading
     config.optimization.splitChunks = {
       chunks: 'all',
@@ -30,6 +37,10 @@ const nextConfig = {
     }
     return config
   },
+  experimental: {
+    // Ensure proper SWC compilation
+    forceSwcTransforms: true
+  }
 }
 
 module.exports = nextConfig
