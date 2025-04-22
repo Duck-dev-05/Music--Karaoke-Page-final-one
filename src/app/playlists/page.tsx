@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -393,6 +393,13 @@ const PremiumAlert = () => {
   );
 };
 
+const categories = [
+  { id: 'recent', label: 'Recent' },
+  { id: 'vietnamese', label: 'Vietnamese' },
+  { id: 'remix', label: 'Remixes' },
+  { id: 'all', label: 'All Songs' }
+];
+
 export default function PlaylistsPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -431,19 +438,11 @@ export default function PlaylistsPage() {
     treble: 0
   });
   const pathname = usePathname();
-  const category = pathname.split("/")[2] || "all";
+  const searchParams = useSearchParams();
+  const currentCategory = searchParams.get('category') || 'recent';
 
   const isPremium = session?.user?.email === "premium@test.com";
   const isFreeUser = session?.user?.email === "free@test.com";
-
-  const categories = [
-    { id: "all", label: "All Songs" },
-    { id: "recent", label: "Recent" },
-    { id: "vietnamese", label: "Vietnamese" },
-    { id: "remix", label: "Remix" }
-  ];
-
-  const currentCategory = pathname.split("/")[2] || "all";
 
   // Filter playlists based on category
   const filteredPlaylists = playlists.filter(playlist => {
