@@ -3,7 +3,7 @@ import './animations.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Providers } from '@/providers'
-import { Navbar } from '@/components/Navbar'
+import ClientNavbarWrapper from '@/components/ClientNavbarWrapper'
 import { MobileNav } from '@/components/MobileNav'
 import { Toaster } from 'sonner'
 import { Toaster as ReactHotToastToaster } from "react-hot-toast";
@@ -25,7 +25,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           <div className="min-h-screen bg-background pb-[80px] md:pb-0">
-            <Navbar />
+            <ClientNavbarWrapper />
             <main>{children}</main>
             <MobileNav />
           </div>

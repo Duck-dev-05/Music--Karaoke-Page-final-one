@@ -3,59 +3,10 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import { db } from "@/lib/db"
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
-
-// Test accounts for development
-const TEST_ACCOUNTS = [
-  {
-    id: "free-test-account",
-    name: "Free User",
-    email: "free@test.com",
-    password: "test123",
-    role: "user",
-    premium: false,
-    bio: "I'm a free user testing out the karaoke features!",
-    location: "Test City",
-    website: "https://example.com",
-    total_favorites: 5,
-    total_playlists: 2,
-    total_songs: 10,
-    createdAt: new Date("2024-01-01").toISOString(),
-    isTestAccount: true
-  },
-  {
-    id: "premium-test-account",
-    name: "Premium User",
-    email: "premium@test.com",
-    password: "test123",
-    role: "user",
-    premium: true,
-    bio: "I'm a premium user enjoying all the features!",
-    location: "Premium City",
-    website: "https://premium-example.com",
-    total_favorites: 50,
-    total_playlists: 10,
-    total_songs: 100,
-    createdAt: new Date("2024-01-01").toISOString(),
-    subscription: {
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-      plan: "Premium Monthly",
-      status: "active"
-    },
-    isTestAccount: true
-  }
-]
-
-// Function to validate test credentials
-const validateTestCredentials = (email: string, password: string) => {
-  const testAccount = TEST_ACCOUNTS.find(account => account.email === email && account.password === password)
-  if (testAccount) {
-    return {
-      ...testAccount,
-      isTestAccount: true
-    }
-  }
-  return null
-}
+import type { User } from ".prisma/client"
+import SpotifyProvider from "next-auth/providers/spotify"
+import GoogleProvider from "next-auth/providers/google"
+import FacebookProvider from "next-auth/providers/facebook"
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
@@ -68,69 +19,71 @@ export const authOptions: NextAuthOptions = {
     error: "/error"
   },
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+    }),
+    FacebookProvider({
+      clientId: process.env.FACEBOOK_CLIENT_ID || "",
+      clientSecret: process.env.FACEBOOK_CLIENT_SECRET || "",
+    }),
     CredentialsProvider({
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
-
-        // For demo purposes, we'll use hardcoded users
-        const users = [
-          {
-            id: "1",
-            name: "Free User",
-            email: "free@test.com",
-            password: "password123"
-          },
-          {
-            id: "2",
-            name: "Premium User",
-            email: "premium@test.com",
-            password: "password123"
-          }
-        ];
-
-        const user = users.find(user => user.email === credentials.email);
-
-        if (!user || user.password !== credentials.password) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email
-        };
+        // Implement your real user lookup and password check here
+        // Example:
+        // const user = await db.user.findUnique({ where: { email: credentials.email } });
+        // if (user && await bcrypt.compare(credentials.password, user.password)) {
+        //   return user;
+        // }
+        return null;
       }
     })
   ],
   callbacks: {
     async jwt({ token, user, trigger, session }) {
-      if (trigger === "update" && session?.user?.email) {
-        // Update the token when the session is updated (e.g., during premium upgrade)
-        token.email = session.user.email;
+      if (trigger === "update" && session?.user) {
+        return {
+          ...token,
+          ...session.user
+        };
       }
-      
       if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
+        return {
+          ...token,
+          ...user
+        };
       }
-      
       return token;
     },
     async session({ session, token }) {
       if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.email = token.email;
-        session.user.name = token.name;
+        session.user = {
+          ...session.user,
+          id: token.id,
+          premium: token.premium,
+          role: token.role,
+          emailNotifications: token.emailNotifications,
+          pushNotifications: token.pushNotifications,
+          createdAt: token.createdAt,
+          isPremium: token.isPremium,
+          premiumUntil: token.premiumUntil,
+          premiumPlan: token.premiumPlan,
+          premiumExpiresAt: token.premiumExpiresAt
+        };
       }
       return session;
+    },
+    async redirect({ url, baseUrl }) {
+      // Always redirect to homepage after successful login
+      return baseUrl;
     }
   },
   secret: process.env.NEXTAUTH_SECRET

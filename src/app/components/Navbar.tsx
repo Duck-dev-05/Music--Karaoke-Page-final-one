@@ -25,7 +25,24 @@ function Navbar() {
           >
             Home
           </Link>
-          
+          <Link
+            href="/songs"
+            className={cn(
+              "text-sm font-medium transition-colors hover:text-foreground/80",
+              pathname === "/songs" ? "text-foreground" : "text-foreground/60"
+            )}
+          >
+            Songs
+          </Link>
+          <Link
+            href="/playlists"
+            className={cn(
+              "text-sm font-medium transition-colors hover:text-foreground/80",
+              pathname === "/playlists" ? "text-foreground" : "text-foreground/60"
+            )}
+          >
+            Playlists
+          </Link>
           <div className="flex items-center space-x-2">
             <Button variant="outline" asChild>
               <Link href="/login">Login</Link>

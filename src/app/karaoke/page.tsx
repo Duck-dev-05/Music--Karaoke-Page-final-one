@@ -23,6 +23,7 @@ import {
   PlusIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+import { useSession } from 'next-auth/react';
 
 interface KaraokeSong {
   id: string;
@@ -45,6 +46,7 @@ export default function KaraokePage() {
   const [activeTab, setActiveTab] = useState('search');
   const { theme, setTheme } = useTheme();
   const playerRef = useRef<any>(null);
+  const { data: session } = useSession();
 
   useEffect(() => {
     // Load YouTube IFrame API
@@ -91,8 +93,14 @@ export default function KaraokePage() {
     setSearchError(null);
     try {
       const response = await fetch(`/api/youtube/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await response.json();
-      
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        throw new Error('Unexpected server response. Please try again later.');
+      }
+
       if (!response.ok) {
         throw new Error(data.message || 'Failed to search');
       }
@@ -333,6 +341,20 @@ export default function KaraokePage() {
                 </div>
               </div>
             </Card>
+
+            {/* Premium-only Download Button */}
+            <div className="mt-4 flex flex-col items-center">
+              {session?.user?.premium ? (
+                <Button className="w-full max-w-xs" variant="primary">
+                  Download Karaoke (Premium)
+                </Button>
+              ) : (
+                <div className="w-full max-w-xs p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-center text-sm">
+                  <b>Premium only:</b> Download karaoke tracks with a premium subscription.<br />
+                  <a href="/payment" className="underline text-yellow-700 hover:text-yellow-900">Upgrade now</a>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right Section - Search and Queue */}

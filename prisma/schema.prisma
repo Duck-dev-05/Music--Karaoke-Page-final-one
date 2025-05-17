@@ -47,8 +47,13 @@ model User {
   image         String?
   password      String?
   premium       Boolean   @default(false)
+  role          String    @default("user")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  // Stripe premium fields
+  premiumPlan      String?
+  premiumExpiresAt DateTime?
 
   // Additional profile fields
   bio           String?   @db.Text

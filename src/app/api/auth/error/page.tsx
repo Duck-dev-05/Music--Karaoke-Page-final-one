@@ -4,40 +4,39 @@ import { useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, ArrowLeft, RefreshCcw } from "lucide-react";
-import { FaSpotify } from "react-icons/fa";
+import { AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
 const errorMessages: Record<string, { title: string; message: string; action: string }> = {
   Configuration: {
     title: "Configuration Error",
-    message: "There is a problem with the Spotify authentication configuration.",
+    message: "There is a problem with the authentication configuration.",
     action: "Please try again or contact support if the problem persists."
   },
   AccessDenied: {
-    title: "Spotify Access Denied",
-    message: "You have not granted the necessary Spotify permissions.",
+    title: "Access Denied",
+    message: "You have not granted the necessary permissions.",
     action: "Please try again and accept all required permissions."
   },
   Verification: {
     title: "Verification Failed",
-    message: "Could not verify your Spotify account.",
+    message: "Could not verify your account.",
     action: "Please try signing in again."
   },
   Default: {
     title: "Authentication Error",
-    message: "An error occurred during Spotify authentication.",
+    message: "An error occurred during authentication.",
     action: "Please try signing in again."
   },
   OAuthSignin: {
-    title: "Spotify Sign In Failed",
-    message: "Could not connect to Spotify.",
+    title: "Sign In Failed",
+    message: "Could not connect to the authentication provider.",
     action: "Please check your internet connection and try again."
   },
   OAuthCallback: {
-    title: "Spotify Callback Error",
-    message: "Error receiving response from Spotify.",
+    title: "Callback Error",
+    message: "Error receiving response from the authentication provider.",
     action: "Please try signing in again."
   }
 };
@@ -46,7 +45,7 @@ export default function AuthError() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  const callbackUrl = searchParams.get("callbackUrl") || "/login";
   
   const errorDetails = error ? errorMessages[error] || errorMessages.Default : errorMessages.Default;
 
@@ -58,11 +57,7 @@ export default function AuthError() {
   }, [error, callbackUrl, errorDetails.message]);
 
   const handleTryAgain = () => {
-    const loginUrl = new URL("/login", window.location.origin);
-    if (callbackUrl) {
-      loginUrl.searchParams.set("callbackUrl", callbackUrl);
-    }
-    window.location.href = loginUrl.toString();
+    router.push("/login");
   };
 
   return (
@@ -81,17 +76,6 @@ export default function AuthError() {
               {errorDetails.action}
             </p>
           </div>
-
-          <div className="p-4 bg-muted rounded-lg">
-            <h3 className="font-medium mb-2">What you can try:</h3>
-            <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
-              <li>Check your internet connection</li>
-              <li>Make sure you're logged into Spotify</li>
-              <li>Accept all required Spotify permissions</li>
-              <li>Clear your browser cookies</li>
-              <li>Try using a different browser</li>
-            </ul>
-          </div>
         </CardContent>
         <CardFooter className="flex justify-between flex-wrap gap-2">
           <Button variant="outline" asChild>
@@ -101,8 +85,7 @@ export default function AuthError() {
             </Link>
           </Button>
           <Button onClick={handleTryAgain} className="flex items-center gap-2">
-            <FaSpotify className="w-4 h-4" />
-            Try Again with Spotify
+            Try Again
           </Button>
         </CardFooter>
       </Card>
